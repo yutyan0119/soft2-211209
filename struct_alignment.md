@@ -1,3 +1,6 @@
+# アライメントの考察
+## ソースコード
+```c
 #include <stdio.h>
 
 typedef struct student {
@@ -56,3 +59,32 @@ int main(int argc, char** argv) {
   printf("dobule %zu\n",sizeof(double));
   return 0;
 }
+
+```
+## 実行結果
+```bash
+~/lecture/software2/2/soft2-211209-src$ ./struct_alignment 
+s_end : 0x7ffd0a028bb0
+s3 : 0x7ffd0a028b30
+s2 : 0x7ffd0a028c30
+s1 : 0x7ffd0a028ab0
+s_begin : 0x7ffd0a028a30
+s_end : 128
+s3 : 128
+s2 : 136
+s1 : 128
+s_begin : 128
+char : 1
+int : 4
+dobule 8
+```
+## 考察
+`Student`は`int`が2つ、`double`が2つ、`char`が100個分含まれた構造体である。実行結果のサイズから必要なメモリ容量は`4*2+8*2+1*100=124byte`のはずだが、実際のサイズは`128`になっている。他の構造体についても同様にすると以下のようになる。
+|構造体|必要なサイズ|サイズ（出力）|
+|---|----|----|
+|Student|124|128|
+|TStudent1|125|136|
+|TStudent2|125|128|
+
+このうち特に特徴的なのは`TStudent1`と`TStudent2`が、全く同じ必要サイズに対して異なるサイズを持っているところである。違いは、構造体内での変数定義の順番である。ここで、以下のような構造体をあらたに宣言して、サイズを見てみることにした。
+<!-- ここから後は後日書く -->
