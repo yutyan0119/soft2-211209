@@ -3,26 +3,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-typedef struct condition {
-  int width;   // 見えている範囲の幅
-  int height;  // 見えている範囲の高さ
-  double G;    // 重力定数
-  double dt;   // シミュレーションの時間幅
-  double cor;  // 壁の反発係数
-} Condition;
-
-// 個々の物体を表す構造体
-typedef struct object {
-  double m;
-  double y;
-  double x;
-  double prev_y;  // 壁からの反発に使用
-  double prev_x;
-  double vy;
-  double vx;
-  double prev_vy;
-  double prev_vx;
-} Object;
+#include "physics2.h"
 
 void my_plot_objects(Object objs[], const size_t numobj, const double t,
                      const Condition cond);
