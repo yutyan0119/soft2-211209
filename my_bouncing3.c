@@ -33,6 +33,8 @@ void my_update_positions(Object objs[], const size_t numobj,
                          const Condition cond);
 void my_bounce(Object objs[], const size_t numobj, const Condition cond);
 
+void my_fusion(Object objs[], const size_t numobj, const Condition cond);
+
 double min(double a, double b);
 double max(double a, double b);
 
@@ -92,12 +94,12 @@ int main(int argc, char** argv) {
     my_update_positions(objects, objnum, cond);
     my_bounce(objects, objnum,
               cond);  // 壁があると仮定した場合に壁を跨いでいたら反射させる
-
+    my_fusion(objects, objnum, cond);
     // 表示の座標系は width/2, height/2 のピクセル位置が原点となるようにする
     my_plot_objects(objects, objnum, t, cond);
 
     usleep(100 * 1000);                 // 200 x 1000us = 200 ms ずつ停止
-    printf("\e[%dA", cond.height + 3);  // 壁とパラメータ表示分で3行
+    printf("\e[%dA", cond.height + 6);  // 壁とパラメータ表示分で3行
   }
   return EXIT_SUCCESS;
 }
@@ -124,7 +126,8 @@ void my_plot_objects(Object objs[], const size_t numobj, const double t,
   for (int i = 0; i < numobj; i++) {
     int y = (int)(objs + i)->y;
     int x = (int)(objs + i)->x;
-    if (-height / 2 <= y && y <= height / 2 && -width / 2 <= x &&
+    double m = (objs + i)->m;
+    if (m != 0 && -height / 2 <= y && y <= height / 2 && -width / 2 <= x &&
         x <= width / 2) {
       field[y + height / 2][x + width / 2] = 'o';
     }
@@ -139,12 +142,15 @@ void my_plot_objects(Object objs[], const size_t numobj, const double t,
     printf("\n");
   }
   printf("%s\n", ceil);
-  printf("t = %2.1f, ", t);
+  printf("t = %2.1f\n", t);
   for (int i = 0; i < numobj; i++) {
-    printf("objs[%d].y = %2.1f, objs[%d].x = %2.1f, vx = %2.2f, vy = %2.2f", i,
-           (objs + i)->y, i, (objs + i)->x, (objs + i)->vx, (objs + i)->vy);
+    printf(
+        "objs[%d].m = %2.1f, objs[%d].y = %2.1f, objs[%d].x = %2.1f, vx = "
+        "%2.2f, vy = %2.2f",
+        i, (objs + i)->m, i, (objs + i)->y, i, (objs + i)->x, (objs + i)->vx,
+        (objs + i)->vy);
     if (i != numobj - 1) {
-      printf(", ");
+      printf("\n");
     }
   }
   printf("\n");
@@ -155,6 +161,7 @@ void my_update_velocities(Object objs[], const size_t numobj,
   double G = cond.G;
   double dt = cond.dt;
   for (int i = 0; i < numobj; i++) {
+    if ((objs + i)->m == 0) continue;
     (objs + i)->prev_vy = (objs + i)->vy;
     (objs + i)->prev_vx = (objs + i)->vx;
     double Fx = 0;
@@ -205,7 +212,7 @@ void my_bounce(Object objs[], const size_t numobj, const Condition cond) {
       vy *= -cor;                             //速度を反転させる
       (objs + i)->prev_vy = vy;
       (objs + i)->vy = vy;
-      (objs + i)->y = max(-height/2,height / 2 + vy * (dt - t));
+      (objs + i)->y = max(-height / 2, height / 2 + vy * (dt - t));
     }
     if (prev_x <= width / 2 && x > width / 2) {
       double vx = (objs + i)->prev_vx;
@@ -213,7 +220,7 @@ void my_bounce(Object objs[], const size_t numobj, const Condition cond) {
       vx *= -cor;
       (objs + i)->prev_vx = vx;
       (objs + i)->vx = vx;
-      (objs + i)->x = max(-width/2, width / 2 + vx * (dt - t));
+      (objs + i)->x = max(-width / 2, width / 2 + vx * (dt - t));
     }
     if (prev_y >= -height / 2 && y < -height / 2) {
       double vy = (objs + i)->prev_vy;        //移動速度
@@ -221,7 +228,7 @@ void my_bounce(Object objs[], const size_t numobj, const Condition cond) {
       vy *= -cor;                             //速度を反転させる
       (objs + i)->prev_vy = vy;
       (objs + i)->vy = vy;
-      (objs + i)->y = min(height/2,-height / 2 + vy * (dt - t));
+      (objs + i)->y = min(height / 2, -height / 2 + vy * (dt - t));
     }
     if (prev_x >= -width / 2 && x < -width / 2) {
       double vx = (objs + i)->prev_vx;
@@ -229,10 +236,38 @@ void my_bounce(Object objs[], const size_t numobj, const Condition cond) {
       vx *= -cor;
       (objs + i)->prev_vx = vx;
       (objs + i)->vx = vx;
-      (objs + i)->x = min(width/2,-width / 2 + vx * (dt - t));
+      (objs + i)->x = min(width / 2, -width / 2 + vx * (dt - t));
     }
   }
 }
+
+void my_fusion(Object objs[], const size_t numobj, const Condition cond) {
+  for (int i = 0; i < numobj; i++) {
+    for (int j = i + 1; j < numobj; j++) {
+      if (i != j) {
+        double x1 = (objs + i)->x;
+        double y1 = (objs + i)->y;
+        double x2 = (objs + j)->x;
+        double y2 = (objs + j)->y;
+        double r = sqrt((x1 - x2) * (x1 - x2) + (y1 - y2) * (y1 - y2));
+        if (r < 1 && (objs + i)->m != 0 && (objs + j)->m != 0) {
+          double m1 = (objs + i)->m;
+          double m2 = (objs + j)->m;
+          double v1x = (objs + i)->vx;
+          double v1y = (objs + i)->vy;
+          double v2x = (objs + j)->vx;
+          double v2y = (objs + j)->vy;
+          double newvx = (m1 * v1x + m2 * v2x) / (m1 + m2);
+          double newvy = (m1 * v1y + m2 * v2y) / (m1 + m2);
+          (objs + i)->m = m1 + m2;
+          (objs + i)->vx = newvx;
+          (objs + i)->vy = newvy;
+          (objs + j)->m = 0;
+        }
+      }
+    }
+  }
+};
 
 double min(double a, double b) {
   if (a < b) {
