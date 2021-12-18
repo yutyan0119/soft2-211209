@@ -3,26 +3,38 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#define mq = 1  //電子の重さ
 
 typedef struct condition {
   int width;   // 見えている範囲の幅
   int height;  // 見えている範囲の高さ
-  double G;    // 重力定数
+  double k;    // クーロン定数
   double dt;   // シミュレーションの時間幅
   double cor;  // 壁の反発係数
+  double Ex;
+  double Ey;
+  double Ez;
+  double Bx;
+  double By;
+  double Bz;
 } Condition;
 
 // 個々の物体を表す構造体
 typedef struct object {
   double m;
+  double q;
   double y;
   double x;
+  double z;
   double prev_y;  // 壁からの反発に使用
   double prev_x;  // 壁からの反発に使用
+  double prev_z;  // 壁からの反発に使用
   double vy;
   double vx;
+  double vz;
   double prev_vy;
   double prev_vx;
+  double prev_vz;
 } Object;
 
 void my_plot_objects(Object objs[], const size_t numobj, const double t,
@@ -40,7 +52,7 @@ double max(double a, double b);
 
 int main(int argc, char** argv) {
   const Condition cond = {
-      .width = 75, .height = 40, .G = 1.0, .dt = 0.5, .cor = 0.8};
+      .width = 75, .height = 40, .k = 1.0, .dt = 0.5, .cor = 0.8};
   if (argc <= 2 || argc > 3) {
     printf("execute like \"./a.out [the number of objects] [filename]\"\n");
     return EXIT_FAILURE;
@@ -69,20 +81,38 @@ int main(int argc, char** argv) {
     if (c == NULL) {
       continue;
     }
-    double data[5];  //ファイルに十分な引数がないときは0として扱う
-    for (int i = 0; i < 5; i++) {
+    double data[7];  //ファイルに十分な引数がないときは0として扱う
+    for (int i = 0; i < 7; i++) {
       data[i] = 0.0;
     }
-    for (int i = 0; i < 5 && c != NULL; i++) {
+    for (int i = 0; i < 7 && c != NULL; i++) {
       data[i] = atof(c);
       c = strtok(NULL, " ");
     }
-    objects[count] = (Object){
-        .m = data[0], .x = data[1], .y = data[2], .vx = data[3], .vy = data[4]};
+    if (count == 0) {
+      cond.Ex = data[0];
+      cond.Ey = data[1];
+      cond.Ez = data[2];
+      cond.Bx = data[3];
+      cond.By = data[4];
+      cond.Bz = data[5];
+    } else {
+      objects[count] = (Object){.m = mq,
+                                .q = data[0],
+                                .x = data[1],
+                                .y = data[2],
+                                .z = data[3],
+                                .vx = data[4],
+                                .vy = data[5],
+                                .vz = data[6]};
+    }
     count++;
   }
-  if (count != objnum) {
-    printf("the number of object is different from data file \n");
+  if (count - 1 != objnum) {
+    printf(
+        "The number of object is different from data file or some data is lacked\n
+        File must contain Electric field and Magnetic fux density information\n
+        Please refer ./data.dat\n");
     return EXIT_FAILURE;
   }
   // シミュレーション. ループは整数で回しつつ、実数時間も更新する
@@ -126,8 +156,8 @@ void my_plot_objects(Object objs[], const size_t numobj, const double t,
   for (int i = 0; i < numobj; i++) {
     int y = (int)(objs + i)->y;
     int x = (int)(objs + i)->x;
-    double m = (objs + i)->m;
-    if (m != 0 && -height / 2 <= y && y <= height / 2 && -width / 2 <= x &&
+    double q = (objs + i)->q;
+    if (q != 0 && -height / 2 <= y && y <= height / 2 && -width / 2 <= x &&
         x <= width / 2) {
       field[y + height / 2][x + width / 2] = 'o';
     }
@@ -145,10 +175,11 @@ void my_plot_objects(Object objs[], const size_t numobj, const double t,
   printf("t = %2.1f\n", t);
   for (int i = 0; i < numobj; i++) {
     printf(
-        "objs[%d].m = %2.1f, objs[%d].y = %2.1f, objs[%d].x = %2.1f, vx = "
-        "%2.2f, vy = %2.2f",
-        i, (objs + i)->m, i, (objs + i)->y, i, (objs + i)->x, (objs + i)->vx,
-        (objs + i)->vy);
+        "objs[%d].q = %2.1f, objs[%d].x = %2.1f, objs[%d].y = %2.1f, "
+        "objs[%d].z = %2.1f, vx = "
+        "%2.2f, vy = %2.2f, vz = %2.2f",
+        i, (objs + i)->q, i, (objs + i)->x, i, (objs + i)->y, i, (objs + i)->z,
+        (objs + i)->vx, (objs + i)->vy, (objs + i)->vz);
     if (i != numobj - 1) {
       printf("\n");
     }
@@ -158,30 +189,48 @@ void my_plot_objects(Object objs[], const size_t numobj, const double t,
 
 void my_update_velocities(Object objs[], const size_t numobj,
                           const Condition cond) {
-  double G = cond.G;
+  double k = cond.k;
   double dt = cond.dt;
+  double Ex = cond.Ex;
+  double Ey = cond.Ey;
+  double Ez = cond.Ez;
+  double Bx = cond.Bx;
+  double By = cond.By;
+  double Bz = cond.Bz;
   for (int i = 0; i < numobj; i++) {
-    if ((objs + i)->m == 0) continue;
-    (objs + i)->prev_vy = (objs + i)->vy;
-    (objs + i)->prev_vx = (objs + i)->vx;
+    if ((objs + i)->q == 0) continue;
+    double vy = (objs + i)->prev_vy = (objs + i)->vy;
+    double vx = (objs + i)->prev_vx = (objs + i)->vx;
+    double vz = (objs + i)->prev_vz = (objs + i)->vz;
     double Fx = 0;
     double Fy = 0;
-    double m = (objs + i)->m;
+    double Fz = 0;
+    double q = (objs + i)->q;
     double y = (objs + i)->y;
     double x = (objs + i)->x;
+    double z = (objs + i)->z;
+    double m = (objs + i)->m;
     for (int j = 0; j < numobj; j++) {
-      double m2 = (objs + j)->m;
+      double q2 = (objs + j)->q;
+      double z2 = (objs + j)->z;
       double y2 = (objs + j)->y;
       double x2 = (objs + j)->x;
       if (i == j || y - y2 == 0 || x - x2 == 0) continue;
-      double r = sqrt((y - y2) * (y - y2) + (x - x2) * (x - x2));
-      Fx += G * m * m2 * (x2 - x) / pow(r, 3.0);
-      Fy += G * m * m2 * (y2 - y) / pow(r, 3.0);
+      double r =
+          sqrt((y - y2) * (y - y2) + (x - x2) * (x - x2) + (z - z2) * (z - z2));
+      Fx += k * q * q2 * (x2 - x) / pow(r, 3.0);
+      Fy += k * q * q2 * (y2 - y) / pow(r, 3.0);
+      Fz += k * q * q2 * (z2 - z) / pow(r, 3.0);
     }
+    Fx += q * (Ex + vy * Bz - vz * By);
+    Fy += q * (Ey + vz * Bx - vx * Bz);
+    Fz += q * (Ez + vx * By - vy * Bx);
     double ax = Fx / m;
     double ay = Fy / m;
+    double az = Fz / m;
     (objs + i)->vx += ax * dt;
     (objs + i)->vy += ay * dt;
+    (objs + i)->vz += az * dt;
   }
 };
 
@@ -193,6 +242,8 @@ void my_update_positions(Object objs[], const size_t numobj,
     (objs + i)->y += (objs + i)->prev_vy * dt;
     (objs + i)->prev_x = (objs + i)->x;
     (objs + i)->x += (objs + i)->prev_vx * dt;
+    (objs + i)->prev_z = (objs + i)->z;
+    (objs + i)->z += (objs + i)->prev_vz * dt;
   }
 };
 
@@ -247,22 +298,30 @@ void my_fusion(Object objs[], const size_t numobj, const Condition cond) {
       if (i != j) {
         double x1 = (objs + i)->x;
         double y1 = (objs + i)->y;
+        double z1 = (objs + i)->z;
         double x2 = (objs + j)->x;
         double y2 = (objs + j)->y;
-        double r = sqrt((x1 - x2) * (x1 - x2) + (y1 - y2) * (y1 - y2));
+        double z2 = (objs + j)->z;
+        double r = sqrt((x1 - x2) * (x1 - x2) + (y1 - y2) * (y1 - y2) +
+                        (z1 - z2) * (z1 - z2));
         if (r < 1 && (objs + i)->m != 0 && (objs + j)->m != 0) {
-          double m1 = (objs + i)->m;
-          double m2 = (objs + j)->m;
+          double q1 = (objs + i)->q;
+          double q2 = (objs + j)->q;
           double v1x = (objs + i)->vx;
           double v1y = (objs + i)->vy;
+          double v1z = (objs + i)->vz;
           double v2x = (objs + j)->vx;
           double v2y = (objs + j)->vy;
+          double v2z = (objs + j)->vz;
+          double m1 = (objs + i)->m;
+          double m2 = (objs + j)->m;
           double newvx = (m1 * v1x + m2 * v2x) / (m1 + m2);
           double newvy = (m1 * v1y + m2 * v2y) / (m1 + m2);
           (objs + i)->m = m1 + m2;
           (objs + i)->vx = newvx;
           (objs + i)->vy = newvy;
           (objs + j)->m = 0;
+          (objs + j)->q = 0;
         }
       }
     }
