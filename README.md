@@ -1,15 +1,17 @@
-# software2 week2 homework
+# software2-week2 homework
 ## 発展課題について(`my_bouncing4.c`)
+![image1](./resultsample.png)
+![image2](./graphplot.gif)
 
-### 内容
-物理シミュレーションの基本構造は変えずに、電荷のシミュレーションにしました。電場、磁場による影響を予めテキストとして保存しておくことで、シミュレーションが回せます。`data.dat`が入力データサンプルです。シミュレーション結果は`result.csv`に保存されます。excelで開けば、二次元のグラフは容易に書くことが出来ます。三次元のグラフはexcelでは書けませんが、工夫するか、別のソフトを使えば閲覧が可能です。
+## 内容
+物理シミュレーションの基本構造は変えずに、電荷のシミュレーションにしました。電場、磁場による影響を予めテキストとして保存しておくことで、シミュレーションが回せます。`data.dat`が入力データサンプルです。シミュレーション結果は`result.csv`に保存されます。excelで開けば、二次元のグラフは容易に書くことが出来ます。三次元のグラフはexcelでは書けませんが、工夫するか、別のソフトを使えば閲覧が可能です。（ここでは[武蔵野台](https://www.vector.co.jp/soft/win95/business/se411074.html)というフリーソフトを利用しました。ちょっと使いづらいですが、最低限の粒子の動きは確認出来ます。）
 - data.datの例
 ```
 #Ex Ey Ez Bx By Bz(my_bouncing4用)
 0 0 0.2 0 0 -0.5
 # q x y z vx vy vz
 1.0 0.0 0.0 0.0 1.0 0.0 0.0 #小さい玉
-#2.0 0.0 0.0 0.0 0.0 1.0 1.0 #2
+2.0 0.0 0.0 0.0 0.0 1.0 1.0 #2
 ```
 - result.csvの例
 ```csv
@@ -28,6 +30,7 @@ objectnumber,q,x,y,z,vx,vy,vz,t
 gcc -o my_bouncing4 my_bouncing4.c -lm
 ```
 ### 実行例
+基本的には課題3の時と同様に`./my_bouncing4 objectnum filename`です。
 ```bash
 ./my_bouncing4 1 data.dat
 ```
