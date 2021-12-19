@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#define mq = 1  //電子の重さ
+#define mq 1  //電子の重さ
 
 typedef struct condition {
   int width;   // 見えている範囲の幅
@@ -38,7 +38,7 @@ typedef struct object {
 } Object;
 
 void my_plot_objects(Object objs[], const size_t numobj, const double t,
-                     const Condition cond);
+                     const Condition cond, FILE* fp);
 void my_update_velocities(Object objs[], const size_t numobj,
                           const Condition cond);
 void my_update_positions(Object objs[], const size_t numobj,
@@ -51,8 +51,7 @@ double min(double a, double b);
 double max(double a, double b);
 
 int main(int argc, char** argv) {
-  const Condition cond = {
-      .width = 75, .height = 40, .k = 1.0, .dt = 0.5, .cor = 0.8};
+  Condition cond = {.width = 75, .height = 40, .k = 1.0, .dt = 0.5, .cor = 0.8};
   if (argc <= 2 || argc > 3) {
     printf("execute like \"./a.out [the number of objects] [filename]\"\n");
     return EXIT_FAILURE;
@@ -66,9 +65,10 @@ int main(int argc, char** argv) {
     printf("File does not found.\n");
     return EXIT_FAILURE;
   }
-  char f[100];
+  char f[500];
   int count = 0;
-  while (fgets(f, 100, fp) != NULL) {
+  while (fgets(f, 500, fp) != NULL) {
+    // fprintf(stderr, "count = %d\n", count);
     int l = strlen(f);
     if (f[l - 1] == '\n') {
       f[l - 1] = '\0';
@@ -96,28 +96,35 @@ int main(int argc, char** argv) {
       cond.Bx = data[3];
       cond.By = data[4];
       cond.Bz = data[5];
+      // fprintf(stderr, "cond set\n");
     } else {
-      objects[count] = (Object){.m = mq,
-                                .q = data[0],
-                                .x = data[1],
-                                .y = data[2],
-                                .z = data[3],
-                                .vx = data[4],
-                                .vy = data[5],
-                                .vz = data[6]};
+      objects[count - 1] = (Object){.m = mq,
+                                    .q = data[0],
+                                    .x = data[1],
+                                    .y = data[2],
+                                    .z = data[3],
+                                    .vx = data[4],
+                                    .vy = data[5],
+                                    .vz = data[6]};
+      // fprintf(stderr, "objects[%d] set\n", count - 1);
     }
     count++;
   }
   if (count - 1 != objnum) {
     printf(
-        "The number of object is different from data file or some data is lacked\n
-        File must contain Electric field and Magnetic fux density information\n
-        Please refer ./data.dat\n");
+        "The number of object is different from data file or some data is "
+        "lacked\n"
+        "File must contain Electric field and Magnetic fux density "
+        "information\n"
+        "Please refer ./data.dat\n");
     return EXIT_FAILURE;
   }
   // シミュレーション. ループは整数で回しつつ、実数時間も更新する
-  const double stop_time = 1000;
+  const double stop_time = 100;
   double t = 0;
+  FILE* fp2;
+  fp2 = fopen("result.csv", "w");
+  fprintf(fp2, "objectnumber,q,x,y,z,vx,vy,vz,t\n");
   for (size_t i = 0; t <= stop_time; i++) {
     t = i * cond.dt;
     my_update_velocities(objects, objnum, cond);
@@ -126,11 +133,12 @@ int main(int argc, char** argv) {
               cond);  // 壁があると仮定した場合に壁を跨いでいたら反射させる
     my_fusion(objects, objnum, cond);
     // 表示の座標系は width/2, height/2 のピクセル位置が原点となるようにする
-    my_plot_objects(objects, objnum, t, cond);
+    my_plot_objects(objects, objnum, t, cond, fp2);
 
     usleep(100 * 1000);                 // 200 x 1000us = 200 ms ずつ停止
-    printf("\e[%dA", cond.height + 6);  // 壁とパラメータ表示分で3行
+    printf("\e[%ldA", cond.height + objnum+3);  // 壁とパラメータ表示分で3行
   }
+  fclose(fp2);
   return EXIT_SUCCESS;
 }
 
@@ -138,7 +146,7 @@ int main(int argc, char** argv) {
 // 最終的に phisics2.h 内の事前に用意された関数プロトタイプをコメントアウト
 
 void my_plot_objects(Object objs[], const size_t numobj, const double t,
-                     const Condition cond) {
+                     const Condition cond, FILE* fp) {
   int width = cond.width;
   int height = cond.height;
   char field[height + 1][width + 1];
@@ -180,6 +188,9 @@ void my_plot_objects(Object objs[], const size_t numobj, const double t,
         "%2.2f, vy = %2.2f, vz = %2.2f",
         i, (objs + i)->q, i, (objs + i)->x, i, (objs + i)->y, i, (objs + i)->z,
         (objs + i)->vx, (objs + i)->vy, (objs + i)->vz);
+    fprintf(fp, "%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f\n", i, (objs + i)->q, (objs + i)->x,
+            (objs + i)->y, (objs + i)->z, (objs + i)->vx, (objs + i)->vy,
+            (objs + i)->vz,t);
     if (i != numobj - 1) {
       printf("\n");
     }
@@ -218,9 +229,9 @@ void my_update_velocities(Object objs[], const size_t numobj,
       if (i == j || y - y2 == 0 || x - x2 == 0) continue;
       double r =
           sqrt((y - y2) * (y - y2) + (x - x2) * (x - x2) + (z - z2) * (z - z2));
-      Fx += k * q * q2 * (x2 - x) / pow(r, 3.0);
-      Fy += k * q * q2 * (y2 - y) / pow(r, 3.0);
-      Fz += k * q * q2 * (z2 - z) / pow(r, 3.0);
+      Fx += -k * q * q2 * (x2 - x) / pow(r, 3.0);
+      Fy += -k * q * q2 * (y2 - y) / pow(r, 3.0);
+      Fz += -k * q * q2 * (z2 - z) / pow(r, 3.0);
     }
     Fx += q * (Ex + vy * Bz - vz * By);
     Fy += q * (Ey + vz * Bx - vx * Bz);
